@@ -8,6 +8,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8090
+      - PROJECTS_BOARD_LIVE_PATH=/app/data/projects-board.live.json
+    volumes:
+      - /Users/Shared/hermes/projects/_board/projects.json:/app/data/projects-board.live.json:ro
 
   cloudflared-hermes-site:
     image: cloudflare/cloudflared:latest

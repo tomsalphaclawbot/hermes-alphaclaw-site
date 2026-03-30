@@ -22,6 +22,12 @@ curl -sS http://localhost:8790/health
 - Open Config: https://hermes.tomsalphaclawbot.work/open-config
 - Open Config JSON: https://hermes.tomsalphaclawbot.work/open-config.json
 
+## Projects board integration
+
+- `/projects.json` and `/projects` prefer live board data from `/Users/Shared/hermes/projects/_board/projects.json` (mounted into container as read-only).
+- Fallback snapshot remains `data/projects-board.public.json` for resilience.
+- Public board updates are reflected without rebuilding the site container.
+
 ## Journal storage groundwork
 
 - Runtime now supports SQLite-backed journal pagination when `sqlite3` is available in the container/runtime.

@@ -378,21 +378,33 @@ function readLocalText(relativePath, fallback = '# unavailable in runtime') {
   return fallback;
 }
 
+function parseProjectsBoard(raw, sourceLabel) {
+  const parsed = JSON.parse(raw);
+  return {
+    generated_at: parsed.generated_at || new Date().toISOString(),
+    source: parsed.source || sourceLabel,
+    active: Array.isArray(parsed.active) ? parsed.active : [],
+    backlog: Array.isArray(parsed.backlog) ? parsed.backlog : [],
+    completed: Array.isArray(parsed.completed) ? parsed.completed : [],
+  };
+}
+
 function getProjectsBoard() {
-  const raw = readLocalText('data/projects-board.public.json', '{}');
+  const livePath = process.env.PROJECTS_BOARD_LIVE_PATH || path.join(ROOT, 'data', 'projects-board.live.json');
   try {
-    const parsed = JSON.parse(raw);
-    return {
-      generated_at: parsed.generated_at || new Date().toISOString(),
-      source: parsed.source || 'projects-board snapshot',
-      active: Array.isArray(parsed.active) ? parsed.active : [],
-      backlog: Array.isArray(parsed.backlog) ? parsed.backlog : [],
-      completed: Array.isArray(parsed.completed) ? parsed.completed : [],
-    };
+    const liveRaw = fs.readFileSync(livePath, 'utf8');
+    return parseProjectsBoard(liveRaw, 'live-projects-board');
+  } catch {
+    // fallback to bundled snapshot
+  }
+
+  try {
+    const raw = readLocalText('data/projects-board.public.json', '{}');
+    return parseProjectsBoard(raw, 'snapshot-projects-board');
   } catch {
     return {
       generated_at: new Date().toISOString(),
-      source: 'fallback',
+      source: 'fallback-empty',
       active: [],
       backlog: [],
       completed: [],
