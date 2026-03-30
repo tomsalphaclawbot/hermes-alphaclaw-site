@@ -189,6 +189,11 @@ function getJournalAutoEntries() {
   return filtered;
 }
 
+function parsePositiveInt(rawValue, fallback) {
+  const n = Number.parseInt(rawValue, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 function getJournal() {
   let base = {
     title: 'Hermes Journal',
@@ -223,6 +228,26 @@ function getJournal() {
       intent: 'Keep updates concise (no high-frequency blog spam).',
     },
     entries: merged,
+  };
+}
+
+function paginateEntries(entries, pageRaw, perPageRaw) {
+  const page = parsePositiveInt(pageRaw, 1);
+  const perPage = Math.min(parsePositiveInt(perPageRaw, 5), 20);
+  const total = entries.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const clampedPage = Math.min(page, totalPages);
+  const start = (clampedPage - 1) * perPage;
+  const pagedEntries = entries.slice(start, start + perPage);
+
+  return {
+    items: pagedEntries,
+    page: clampedPage,
+    per_page: perPage,
+    total,
+    total_pages: totalPages,
+    has_prev: clampedPage > 1,
+    has_next: clampedPage < totalPages,
   };
 }
 
@@ -359,14 +384,33 @@ app.get('/changelog', (_req, res) => {
 </html>`);
 });
 
-app.get('/journal.json', (_req, res) => {
-  res.json(getJournal());
-});
-
-app.get('/journal', (_req, res) => {
+app.get('/journal.json', (req, res) => {
   const journal = getJournal();
   const entries = Array.isArray(journal.entries) ? journal.entries : [];
-  const rows = entries
+  const pageData = paginateEntries(entries, req.query.page, req.query.per_page);
+
+  res.json({
+    title: journal.title,
+    generated_at: journal.generated_at,
+    auto_policy: journal.auto_policy,
+    pagination: {
+      page: pageData.page,
+      per_page: pageData.per_page,
+      total: pageData.total,
+      total_pages: pageData.total_pages,
+      has_prev: pageData.has_prev,
+      has_next: pageData.has_next,
+    },
+    entries: pageData.items,
+  });
+});
+
+app.get('/journal', (req, res) => {
+  const journal = getJournal();
+  const entries = Array.isArray(journal.entries) ? journal.entries : [];
+  const pageData = paginateEntries(entries, req.query.page, req.query.per_page);
+
+  const rows = pageData.items
     .map((entry) => {
       const autoBadge = entry.auto ? ' · auto' : '';
       return `
@@ -378,6 +422,13 @@ app.get('/journal', (_req, res) => {
     `;
     })
     .join('');
+
+  const prevLink = pageData.has_prev
+    ? `<a href="/journal?page=${pageData.page - 1}&per_page=${pageData.per_page}">← Newer</a>`
+    : '<span style="color:#6f7f95;">← Newer</span>';
+  const nextLink = pageData.has_next
+    ? `<a href="/journal?page=${pageData.page + 1}&per_page=${pageData.per_page}">Older →</a>`
+    : '<span style="color:#6f7f95;">Older →</span>';
 
   res.type('html').send(`<!doctype html>
 <html lang="en">
@@ -393,6 +444,8 @@ app.get('/journal', (_req, res) => {
     .entry h3 { margin: 8px 0; }
     .entry p { margin: 0; color: #b8c6da; line-height: 1.5; }
     .meta { color: #92a0b3; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+    .pager { margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .pager .state { color: #92a0b3; }
   </style>
 </head>
 <body>
@@ -402,6 +455,11 @@ app.get('/journal', (_req, res) => {
     <p>Auto-update policy: max ${escapeHtml(String(journal.auto_policy?.max_auto_entries_per_refresh ?? 0))} signal entries per refresh, capped at ${escapeHtml(String(journal.auto_policy?.max_total_entries ?? 0))} total.</p>
     <p><a href="/">← Home</a> · <a href="/journal.json">Journal JSON</a> · <a href="/changelog">Build Log</a></p>
     ${rows || '<p>No journal entries yet.</p>'}
+    <div class="pager">
+      <div>${prevLink}</div>
+      <div class="state">Page ${pageData.page} / ${pageData.total_pages}</div>
+      <div>${nextLink}</div>
+    </div>
   </div>
 </body>
 </html>`);
