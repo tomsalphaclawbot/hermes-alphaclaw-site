@@ -96,6 +96,8 @@ function getCapabilities() {
       '/ops/summary.json',
       '/principles',
       '/changelog',
+      '/open-config',
+      '/open-config.json',
     ],
     core_functions: [
       'Autonomous execution',
@@ -128,6 +130,76 @@ function getOpsSummary() {
       gateway_state: status.hermes.gateway_state,
     },
     latest_commits: commits,
+  };
+}
+
+function sanitizeConfigText(input = '') {
+  return input
+    .replace(/\/Users\/[^/\s]+/g, '/Users/<user>')
+    .replace(/(\/etc\/cloudflared\/)[^\s"']+/g, '$1<redacted>')
+    .replace(/([A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/g, '<redacted-token>');
+}
+
+function readLocalText(relativePath, fallback = '# unavailable in runtime') {
+  const candidatePaths = [
+    path.join(ROOT, relativePath),
+    path.join(ROOT, 'open-config', path.basename(relativePath)),
+  ];
+
+  for (const fullPath of candidatePaths) {
+    try {
+      return sanitizeConfigText(fs.readFileSync(fullPath, 'utf8'));
+    } catch {
+      // try next location
+    }
+  }
+
+  return fallback;
+}
+
+function getOpenConfig() {
+  const pkgRaw = readLocalText('package.json', '{}');
+  let pkg = {};
+  try {
+    pkg = JSON.parse(pkgRaw);
+  } catch {
+    pkg = {};
+  }
+
+  return {
+    generated_at: new Date().toISOString(),
+    mission: 'Open-source configuration surface for Hermes public infrastructure.',
+    redaction_policy: [
+      'No API tokens or credential blobs are published.',
+      'Absolute local paths are normalized.',
+      'Operational shape is open; sensitive material remains private.',
+    ],
+    runtime_layout: {
+      root: '/Users/Shared/hermes',
+      repo: '/Users/Shared/hermes/agent',
+      home: '/Users/Shared/hermes/home',
+      compatibility_symlinks: [
+        '~/.hermes -> /Users/Shared/hermes/home',
+        '~/.openclaw/workspace/projects/hermes-agent -> /Users/Shared/hermes/agent',
+      ],
+    },
+    stack: {
+      site: 'Node.js + Express',
+      tunnel: 'Cloudflare Tunnel (cloudflared)',
+      deploy: 'Docker Compose',
+    },
+    files: {
+      docker_compose_yml: readLocalText('docker-compose.yml'),
+      cloudflared_config_yml: readLocalText('cloudflared-config.yml'),
+      dockerfile: readLocalText('Dockerfile'),
+      hermes_config_public_yaml: readLocalText('data/hermes-config.public.yaml'),
+    },
+    package: {
+      name: pkg.name || 'unknown',
+      version: pkg.version || 'unknown',
+      scripts: pkg.scripts || {},
+      dependencies: pkg.dependencies || {},
+    },
   };
 }
 
@@ -196,6 +268,79 @@ app.get('/principles', (_req, res) => {
 
 app.get('/ops', (_req, res) => {
   res.sendFile(path.join(ROOT, 'public', 'ops.html'));
+});
+
+app.get('/open-config.json', (_req, res) => {
+  res.json(getOpenConfig());
+});
+
+app.get('/open-config', (_req, res) => {
+  const openConfig = getOpenConfig();
+
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes Open Config</title>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b0f14; color: #e7edf5; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 28px; }
+    a { color: #67d7ff; }
+    .card { border: 1px solid #233041; border-radius: 14px; padding: 16px; margin-top: 14px; background: #121923; }
+    .muted { color: #92a0b3; }
+    .grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+    @media (min-width: 980px) { .grid { grid-template-columns: 1fr 1fr; } }
+    pre { background: #0f1520; border: 1px solid #223244; padding: 12px; border-radius: 10px; overflow-x: auto; color: #b8c6da; }
+    code { color: #8bffbd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Hermes Open Config</h1>
+    <p class="muted">Public operator configuration surface — secrets redacted by design.</p>
+    <p><a href="/">← Home</a> · <a href="/ops">Ops</a> · <a href="/open-config.json">Open Config JSON</a></p>
+
+    <div class="card">
+      <h3>Redaction policy</h3>
+      <ul>
+        ${openConfig.redaction_policy.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Runtime layout</h3>
+        <pre><code>${escapeHtml(JSON.stringify(openConfig.runtime_layout, null, 2))}</code></pre>
+      </div>
+      <div class="card">
+        <h3>Package metadata</h3>
+        <pre><code>${escapeHtml(JSON.stringify(openConfig.package, null, 2))}</code></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>docker-compose.yml</h3>
+      <pre><code>${escapeHtml(openConfig.files.docker_compose_yml)}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>cloudflared-config.yml</h3>
+      <pre><code>${escapeHtml(openConfig.files.cloudflared_config_yml)}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Dockerfile</h3>
+      <pre><code>${escapeHtml(openConfig.files.dockerfile)}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Hermes runtime config (public snapshot)</h3>
+      <pre><code>${escapeHtml(openConfig.files.hermes_config_public_yaml)}</code></pre>
+    </div>
+  </div>
+</body>
+</html>`);
 });
 
 app.get('*', (_req, res) => {

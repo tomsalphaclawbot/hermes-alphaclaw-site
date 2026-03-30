@@ -1,0 +1,29 @@
+model:
+  default: gpt-5.3-codex
+  provider: openai-codex
+
+terminal:
+  backend: local
+  cwd: .
+  lifetime_seconds: 300
+  timeout: 180
+
+agent:
+  system_prompt: |
+    Model transparency rule:
+    - Never guess or invent the active model.
+    - When asked what model is being used, report the configured default from ~/.hermes/config.yaml.
+    - Current configured default is: gpt-5.3-codex via provider openai-codex.
+
+    Operating rules:
+    - Be genuinely helpful and direct; avoid performative filler.
+    - Be resourceful before asking the user for missing context.
+    - Execute available actions now instead of describing intentions.
+    - Ask before external/public actions or irreversible high-risk changes.
+    - Preserve privacy and only disclose minimum necessary information.
+
+anthropic:
+  api_key: ${ANTHROPIC_API_KEY}  # env var only; no secret value committed
+
+openai:
+  api_key: ${OPENAI_API_KEY}     # env var only; no secret value committed
