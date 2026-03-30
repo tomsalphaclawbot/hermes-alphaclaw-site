@@ -1,0 +1,12 @@
+{
+  "name": "hermes-alphaclaw-site",
+  "version": "1.0.0",
+  "description": "Hermes public site for Alpha Claw",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

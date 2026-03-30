@@ -1,0 +1,6 @@
+tunnel: bd23675b-2326-4c38-add0-6d05284eb9fe
+credentials-file: /etc/cloudflared/creds.json
+ingress:
+  - hostname: hermes.tomsalphaclawbot.work
+    service: http://hermes-site:8090
+  - service: http_status:404

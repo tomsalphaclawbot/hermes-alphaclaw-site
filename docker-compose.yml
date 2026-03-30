@@ -1,0 +1,21 @@
+services:
+  hermes-site:
+    build: .
+    container_name: hermes-alphaclaw-site
+    ports:
+      - "8790:8090"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=8090
+
+  cloudflared-hermes-site:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-hermes-alphaclaw-site
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    restart: unless-stopped
+    depends_on:
+      - hermes-site
+    volumes:
+      - ./cloudflared-config.yml:/etc/cloudflared/config.yml:ro
+      - /Users/openclaw/.cloudflared/bd23675b-2326-4c38-add0-6d05284eb9fe.json:/etc/cloudflared/creds.json:ro
