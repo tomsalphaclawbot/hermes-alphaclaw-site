@@ -611,7 +611,6 @@ app.get('/projects', (_req, res) => {
     const links = [
       project.public_url ? `<a href="${escapeHtml(project.public_url)}" target="_blank" rel="noreferrer">public</a>` : '',
       project.health_url ? `<a href="${escapeHtml(project.health_url)}" target="_blank" rel="noreferrer">health</a>` : '',
-      project.local_url ? `<code>${escapeHtml(project.local_url)}</code>` : '',
     ].filter(Boolean).join(' · ');
 
     return `<article class="project">

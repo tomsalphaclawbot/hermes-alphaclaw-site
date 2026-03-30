@@ -4,13 +4,12 @@
       "name": "hello-world-tunnel",
       "status": "live",
       "goal": "Deploy hello-world app in Docker with Cloudflare tunnel",
-      "local_url": "http://localhost:8791",
       "public_url": "https://hello-hermes.tomsalphaclawbot.work",
       "health_url": "https://hello-hermes.tomsalphaclawbot.work/health"
     }
   ],
   "backlog": [],
   "completed": [],
-  "generated_at": "2026-03-30T11:36:22Z",
+  "generated_at": "2026-03-30T11:41:48Z",
   "source": "Hermes projects board snapshot"
 }
