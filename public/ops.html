@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes Ops Console</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090d12;
+      --panel: #121923;
+      --text: #e7edf5;
+      --muted: #8fa0b5;
+      --line: #253445;
+      --accent: #64d6ff;
+      --ok: #78ffb0;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 10px 14px; border-radius: 10px; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; margin: 18px 0; }
+    .card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--panel); }
+    .label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; }
+    .value { font-size: 18px; font-weight: 700; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+    th { color: var(--muted); font-weight: 600; }
+    code { color: var(--ok); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1 style="margin:0 0 8px;">Hermes Ops Console</h1>
+        <div class="muted">Read-only live telemetry surface. Refreshes every 15s.</div>
+      </div>
+      <div>
+        <button id="refresh" class="btn">Refresh now</button>
+      </div>
+    </div>
+
+    <p><a href="/">← Home</a> · <a href="/principles">Principles</a> · <a href="/status.json">Status JSON</a> · <a href="/changelog.json">Changelog JSON</a></p>
+
+    <div class="grid">
+      <div class="card"><div class="label">Service</div><div id="service" class="value">…</div></div>
+      <div class="card"><div class="label">Uptime (s)</div><div id="uptime" class="value">…</div></div>
+      <div class="card"><div class="label">Gateway State</div><div id="gateway" class="value">…</div></div>
+      <div class="card"><div class="label">Runtime</div><div id="runtime" class="value">…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Latest commits</div>
+      <table>
+        <thead><tr><th>Commit</th><th>Date</th><th>Message</th></tr></thead>
+        <tbody id="commits"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function loadOps() {
+      try {
+        const res = await fetch('/ops/summary.json', { cache: 'no-store' });
+        const data = await res.json();
+
+        document.getElementById('service').textContent = `${data.service.name} (${data.service.status})`;
+        document.getElementById('uptime').textContent = String(data.service.uptime_seconds);
+        document.getElementById('gateway').textContent = data.hermes_runtime.gateway_state;
+        document.getElementById('runtime').textContent = `${data.node.platform} · ${data.node.node}`;
+
+        const rows = (data.latest_commits || []).map(c =>
+          `<tr><td><code>${c.hash}</code></td><td>${c.date}</td><td>${c.subject}</td></tr>`
+        ).join('');
+
+        document.getElementById('commits').innerHTML = rows || '<tr><td colspan="3" class="muted">No commit data.</td></tr>';
+      } catch (err) {
+        document.getElementById('commits').innerHTML = `<tr><td colspan="3" class="muted">Failed to load ops summary: ${String(err)}</td></tr>`;
+      }
+    }
+
+    document.getElementById('refresh').addEventListener('click', loadOps);
+    loadOps();
+    setInterval(loadOps, 15000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "generated_at": "auto",
+  "commits": [
+    {
+      "hash": "b64002a",
+      "date": "2026-03-30",
+      "subject": "Add principles/changelog pages and machine-readable status endpoints"
+    },
+    {
+      "hash": "b6ccc00",
+      "date": "2026-03-30",
+      "subject": "Initial Hermes AlphaClaw site with Docker + Cloudflare tunnel"
+    }
+  ]
+}

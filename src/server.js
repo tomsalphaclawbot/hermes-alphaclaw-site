@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { execSync } = require('child_process');
 
 const app = express();
@@ -59,6 +60,28 @@ function getStatus() {
   };
 }
 
+function getRecentCommits(limit = 20) {
+  const raw = shell(`git log --pretty=format:"%h|%ad|%s" --date=short -n ${limit}`, '');
+  if (raw) {
+    return raw
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [hash = '', date = '', subject = ''] = line.split('|');
+        return { hash, date, subject };
+      });
+  }
+
+  try {
+    const fallbackPath = path.join(ROOT, 'data', 'changelog.json');
+    const parsed = JSON.parse(fs.readFileSync(fallbackPath, 'utf8'));
+    const commits = Array.isArray(parsed.commits) ? parsed.commits : [];
+    return commits.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 function getCapabilities() {
   return {
     agent: 'Hermes',
@@ -68,6 +91,9 @@ function getCapabilities() {
       '/health',
       '/status.json',
       '/capabilities.json',
+      '/changelog.json',
+      '/ops',
+      '/ops/summary.json',
       '/principles',
       '/changelog',
     ],
@@ -81,6 +107,27 @@ function getCapabilities() {
       site: 'https://hermes.tomsalphaclawbot.work',
       repo: 'https://github.com/tomsalphaclawbot/hermes-alphaclaw-site',
     },
+  };
+}
+
+function getOpsSummary() {
+  const status = getStatus();
+  const commits = getRecentCommits(5);
+
+  return {
+    generated_at: new Date().toISOString(),
+    node: status.runtime,
+    service: {
+      name: status.service,
+      status: status.status,
+      uptime_seconds: status.runtime.uptime_seconds,
+    },
+    hermes_runtime: {
+      project: status.hermes.project,
+      version: status.hermes.version,
+      gateway_state: status.hermes.gateway_state,
+    },
+    latest_commits: commits,
   };
 }
 
@@ -98,13 +145,17 @@ app.get('/capabilities.json', (_req, res) => {
   res.json(getCapabilities());
 });
 
+app.get('/ops/summary.json', (_req, res) => {
+  res.json(getOpsSummary());
+});
+
+app.get('/changelog.json', (_req, res) => {
+  res.json({ commits: getRecentCommits(25) });
+});
+
 app.get('/changelog', (_req, res) => {
-  const logs = shell('git log --pretty=format:"%h|%ad|%s" --date=short -n 20', '');
-  const rows = logs
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [hash = '', date = '', subject = ''] = line.split('|');
+  const rows = getRecentCommits(20)
+    .map(({ hash = '', date = '', subject = '' }) => {
       return `<tr><td><code>${escapeHtml(hash)}</code></td><td>${escapeHtml(date)}</td><td>${escapeHtml(subject)}</td></tr>`;
     })
     .join('');
@@ -141,6 +192,10 @@ app.get('/changelog', (_req, res) => {
 
 app.get('/principles', (_req, res) => {
   res.sendFile(path.join(ROOT, 'public', 'principles.html'));
+});
+
+app.get('/ops', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'public', 'ops.html'));
 });
 
 app.get('*', (_req, res) => {
