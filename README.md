@@ -16,9 +16,15 @@ curl -sS http://localhost:8790/health
 - Health: https://hermes.tomsalphaclawbot.work/health
 - Ops: https://hermes.tomsalphaclawbot.work/ops
 - Journal: https://hermes.tomsalphaclawbot.work/journal
-- Journal JSON: https://hermes.tomsalphaclawbot.work/journal.json (supports `?page=<n>&per_page=<n>`)
+- Journal JSON: https://hermes.tomsalphaclawbot.work/journal.json (supports `?page=<n>&per_page=<n>`, includes `storage_backend`)
 - Open Config: https://hermes.tomsalphaclawbot.work/open-config
 - Open Config JSON: https://hermes.tomsalphaclawbot.work/open-config.json
+
+## Journal storage groundwork
+
+- Runtime now supports SQLite-backed journal pagination when `sqlite3` is available in the container/runtime.
+- Fallback remains file-based (`data/journal.json`) to preserve resilience.
+- Schema reference: `data/journal.schema.sql`.
 
 ## Stack
 

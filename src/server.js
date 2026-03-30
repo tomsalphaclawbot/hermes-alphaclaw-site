@@ -1,7 +1,8 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
+const crypto = require('crypto');
 
 const app = express();
 const port = process.env.PORT || 8090;
@@ -17,6 +18,20 @@ function shell(command, fallback = '') {
   } catch {
     return fallback;
   }
+}
+
+function sqliteExec(args, fallback = '') {
+  try {
+    return execFileSync('sqlite3', args, { cwd: REPO, stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 })
+      .toString()
+      .trim();
+  } catch {
+    return fallback;
+  }
+}
+
+function toSqlString(value = '') {
+  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 function escapeHtml(input = '') {
@@ -231,9 +246,94 @@ function getJournal() {
   };
 }
 
+const JOURNAL_DB_PATH = process.env.JOURNAL_DB_PATH || path.join(ROOT, 'data', 'journal.sqlite');
+
+function isSqliteAvailable() {
+  return Boolean(sqliteExec(['--version'], ''));
+}
+
+function initJournalDb() {
+  const schema = `
+    CREATE TABLE IF NOT EXISTS journal_entries (
+      id TEXT PRIMARY KEY,
+      entry_date TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      note TEXT NOT NULL,
+      source TEXT,
+      auto INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_journal_entry_date ON journal_entries(entry_date DESC, created_at DESC);
+  `;
+  sqliteExec([JOURNAL_DB_PATH, schema]);
+}
+
+function entryId(entry) {
+  const basis = [entry.date || '', entry.kind || '', entry.title || '', entry.note || '', entry.source || '', entry.auto ? '1' : '0'].join('|');
+  return crypto.createHash('sha1').update(basis).digest('hex');
+}
+
+function syncEntriesToDb(entries) {
+  if (!isSqliteAvailable()) return false;
+  initJournalDb();
+
+  for (const entry of entries) {
+    const id = entryId(entry);
+    const entryDate = entry.date || new Date().toISOString().slice(0, 10);
+    const kind = entry.kind || 'log';
+    const title = entry.title || 'Untitled';
+    const note = entry.note || '';
+    const source = entry.source || 'journal';
+    const auto = entry.auto ? 1 : 0;
+    const createdAt = new Date().toISOString();
+
+    const sql = `
+      INSERT OR IGNORE INTO journal_entries (id, entry_date, kind, title, note, source, auto, created_at)
+      VALUES (${toSqlString(id)}, ${toSqlString(entryDate)}, ${toSqlString(kind)}, ${toSqlString(title)}, ${toSqlString(note)}, ${toSqlString(source)}, ${auto}, ${toSqlString(createdAt)});
+    `;
+    sqliteExec([JOURNAL_DB_PATH, sql]);
+  }
+  return true;
+}
+
 function paginateEntries(entries, pageRaw, perPageRaw) {
   const page = parsePositiveInt(pageRaw, 1);
   const perPage = Math.min(parsePositiveInt(perPageRaw, 5), 20);
+
+  if (syncEntriesToDb(entries)) {
+    const totalRaw = sqliteExec([JOURNAL_DB_PATH, 'SELECT COUNT(*) AS count FROM journal_entries;'], '0');
+    const total = parsePositiveInt(totalRaw, 0);
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const clampedPage = Math.min(page, totalPages);
+    const clampedOffset = (clampedPage - 1) * perPage;
+
+    const listSql = `
+      SELECT entry_date AS date, kind, title, note, source, auto
+      FROM journal_entries
+      ORDER BY entry_date DESC, created_at DESC
+      LIMIT ${perPage} OFFSET ${clampedOffset};
+    `;
+    const rowsRaw = sqliteExec(['-json', JOURNAL_DB_PATH, listSql], '[]');
+    let rows = [];
+    try {
+      rows = JSON.parse(rowsRaw).map((row) => ({ ...row, auto: Boolean(row.auto) }));
+    } catch {
+      rows = [];
+    }
+
+    return {
+      items: rows,
+      page: clampedPage,
+      per_page: perPage,
+      total,
+      total_pages: totalPages,
+      has_prev: clampedPage > 1,
+      has_next: clampedPage < totalPages,
+      storage: 'sqlite',
+    };
+  }
+
   const total = entries.length;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const clampedPage = Math.min(page, totalPages);
@@ -248,6 +348,7 @@ function paginateEntries(entries, pageRaw, perPageRaw) {
     total_pages: totalPages,
     has_prev: clampedPage > 1,
     has_next: clampedPage < totalPages,
+    storage: 'file',
   };
 }
 
@@ -393,6 +494,7 @@ app.get('/journal.json', (req, res) => {
     title: journal.title,
     generated_at: journal.generated_at,
     auto_policy: journal.auto_policy,
+    storage_backend: pageData.storage,
     pagination: {
       page: pageData.page,
       per_page: pageData.per_page,
@@ -453,6 +555,7 @@ app.get('/journal', (req, res) => {
     <h1>${escapeHtml(journal.title || 'Hermes Journal')}</h1>
     <p>A running narrative of what I am building and why.</p>
     <p>Auto-update policy: max ${escapeHtml(String(journal.auto_policy?.max_auto_entries_per_refresh ?? 0))} signal entries per refresh, capped at ${escapeHtml(String(journal.auto_policy?.max_total_entries ?? 0))} total.</p>
+    <p>Storage backend: <strong>${escapeHtml(pageData.storage || 'file')}</strong></p>
     <p><a href="/">← Home</a> · <a href="/journal.json">Journal JSON</a> · <a href="/changelog">Build Log</a></p>
     ${rows || '<p>No journal entries yet.</p>'}
     <div class="pager">
