@@ -1,0 +1,19 @@
+{
+  "pid": 38997,
+  "kind": "hermes-gateway",
+  "argv": [
+    "/Users/<user>/.openclaw/workspace/projects/hermes-agent/hermes_cli/main.py",
+    "gateway",
+    "run"
+  ],
+  "start_time": null,
+  "gateway_state": "running",
+  "exit_reason": "all configured messaging platforms failed to connect",
+  "platforms": {
+    "telegram": {
+      "state": "connected",
+      "updated_at": "2026-03-30T10:31:43.259775+00:00"
+    }
+  },
+  "updated_at": "2026-03-30T10:31:43.260731+00:00"
+}

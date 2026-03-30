@@ -193,6 +193,10 @@ function getOpenConfig() {
       cloudflared_config_yml: readLocalText('cloudflared-config.yml'),
       dockerfile: readLocalText('Dockerfile'),
       hermes_config_public_yaml: readLocalText('data/hermes-config.public.yaml'),
+      hermes_policy_public_md: readLocalText('data/hermes-policy.public.md'),
+      hermes_soul_public_md: readLocalText('data/hermes-soul.public.md'),
+      gateway_state_public_json: readLocalText('data/gateway-state.public.json'),
+      toolsets_public_json: readLocalText('data/toolsets.public.json'),
     },
     package: {
       name: pkg.name || 'unknown',
@@ -335,8 +339,28 @@ app.get('/open-config', (_req, res) => {
     </div>
 
     <div class="card">
-      <h3>Hermes runtime config (public snapshot)</h3>
+      <h3>Hermes runtime config (active public snapshot)</h3>
       <pre><code>${escapeHtml(openConfig.files.hermes_config_public_yaml)}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Gateway runtime state (public snapshot)</h3>
+      <pre><code>${escapeHtml(openConfig.files.gateway_state_public_json)}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Toolsets and core tools (public snapshot)</h3>
+      <pre><code>${escapeHtml(openConfig.files.toolsets_public_json)}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Hermes local policy</h3>
+      <pre><code>${escapeHtml(openConfig.files.hermes_policy_public_md)}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Hermes soul/instructions</h3>
+      <pre><code>${escapeHtml(openConfig.files.hermes_soul_public_md)}</code></pre>
     </div>
   </div>
 </body>

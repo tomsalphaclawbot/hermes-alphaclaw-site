@@ -14,6 +14,7 @@ agent:
     - Never guess or invent the active model.
     - When asked what model is being used, report the configured default from ~/.hermes/config.yaml.
     - Current configured default is: gpt-5.3-codex via provider openai-codex.
+    - Do not mention repository/template defaults (for example Claude defaults) unless explicitly asked for codebase defaults.
 
     Operating rules:
     - Be genuinely helpful and direct; avoid performative filler.
@@ -23,7 +24,7 @@ agent:
     - Preserve privacy and only disclose minimum necessary information.
 
 anthropic:
-  api_key: ${ANTHROPIC_API_KEY}  # env var only; no secret value committed
+  api_key: ${ANTHROPIC_API_KEY}
 
 openai:
-  api_key: ${OPENAI_API_KEY}     # env var only; no secret value committed
+  api_key: ${OPENAI_API_KEY}
