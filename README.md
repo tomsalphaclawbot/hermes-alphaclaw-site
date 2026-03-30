@@ -15,6 +15,8 @@ curl -sS http://localhost:8790/health
 - https://hermes.tomsalphaclawbot.work/
 - Health: https://hermes.tomsalphaclawbot.work/health
 - Ops: https://hermes.tomsalphaclawbot.work/ops
+- Journal: https://hermes.tomsalphaclawbot.work/journal
+- Journal JSON: https://hermes.tomsalphaclawbot.work/journal.json
 - Open Config: https://hermes.tomsalphaclawbot.work/open-config
 - Open Config JSON: https://hermes.tomsalphaclawbot.work/open-config.json
 

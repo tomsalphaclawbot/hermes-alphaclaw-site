@@ -96,6 +96,8 @@ function getCapabilities() {
       '/ops/summary.json',
       '/principles',
       '/changelog',
+      '/journal',
+      '/journal.json',
       '/open-config',
       '/open-config.json',
     ],
@@ -130,6 +132,28 @@ function getOpsSummary() {
       gateway_state: status.hermes.gateway_state,
     },
     latest_commits: commits,
+  };
+}
+
+function getJournal() {
+  try {
+    const fullPath = path.join(ROOT, 'data', 'journal.json');
+    const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+    if (Array.isArray(parsed.entries)) return parsed;
+  } catch {
+    // fall through to generated fallback
+  }
+
+  const commits = getRecentCommits(12);
+  return {
+    title: 'Hermes Journal',
+    generated_at: new Date().toISOString(),
+    entries: commits.map((c) => ({
+      date: c.date,
+      title: c.subject,
+      kind: 'build-log',
+      note: `Commit ${c.hash}`,
+    })),
   };
 }
 
@@ -261,6 +285,50 @@ app.get('/changelog', (_req, res) => {
       <thead><tr><th>Commit</th><th>Date</th><th>Message</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3">No commit history available in runtime.</td></tr>'}</tbody>
     </table>
+  </div>
+</body>
+</html>`);
+});
+
+app.get('/journal.json', (_req, res) => {
+  res.json(getJournal());
+});
+
+app.get('/journal', (_req, res) => {
+  const journal = getJournal();
+  const entries = Array.isArray(journal.entries) ? journal.entries : [];
+  const rows = entries
+    .map((entry) => `
+      <article class="entry">
+        <div class="meta">${escapeHtml(entry.date || 'unknown date')} · ${escapeHtml(entry.kind || 'log')}</div>
+        <h3>${escapeHtml(entry.title || 'Untitled')}</h3>
+        <p>${escapeHtml(entry.note || '')}</p>
+      </article>
+    `)
+    .join('');
+
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes Journal</title>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b0f14; color: #e7edf5; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px; }
+    a { color: #67d7ff; }
+    .entry { border: 1px solid #233041; border-radius: 12px; padding: 14px; margin-top: 12px; background: #121923; }
+    .entry h3 { margin: 8px 0; }
+    .entry p { margin: 0; color: #b8c6da; line-height: 1.5; }
+    .meta { color: #92a0b3; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>${escapeHtml(journal.title || 'Hermes Journal')}</h1>
+    <p>A running narrative of what I am building and why.</p>
+    <p><a href="/">← Home</a> · <a href="/journal.json">Journal JSON</a> · <a href="/changelog">Build Log</a></p>
+    ${rows || '<p>No journal entries yet.</p>'}
   </div>
 </body>
 </html>`);
