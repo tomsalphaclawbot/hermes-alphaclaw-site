@@ -135,25 +135,94 @@ function getOpsSummary() {
   };
 }
 
+function getJournalAutoEntries() {
+  const auto = [];
+
+  // Signal 1: build activity (latest commit)
+  const [latestCommit] = getRecentCommits(1);
+  if (latestCommit) {
+    auto.push({
+      date: latestCommit.date,
+      kind: 'auto-build',
+      title: `Build pulse: ${latestCommit.subject}`,
+      note: `Auto from latest commit ${latestCommit.hash}.`,
+      source: 'git',
+      auto: true,
+    });
+  }
+
+  // Signal 2: gateway/runtime state
+  try {
+    const gatewayPath = path.join(ROOT, 'data', 'gateway-state.public.json');
+    const gateway = JSON.parse(fs.readFileSync(gatewayPath, 'utf8'));
+    const gatewayState = gateway.gateway_state || 'unknown';
+    const platformStates = gateway.platforms || {};
+    const connected = Object.entries(platformStates)
+      .filter(([, v]) => v && v.state === 'connected')
+      .map(([name]) => name);
+
+    const updatedAt = gateway.updated_at || new Date().toISOString();
+    auto.push({
+      date: String(updatedAt).slice(0, 10),
+      kind: 'auto-ops',
+      title: `Ops pulse: gateway ${gatewayState}`,
+      note: connected.length > 0
+        ? `Connected platforms: ${connected.join(', ')}.`
+        : 'No connected platforms reported.',
+      source: 'gateway-state',
+      auto: true,
+    });
+  } catch {
+    // optional signal
+  }
+
+  // Hard throttle: keep auto output compact, max 2 entries total and max 1 per kind/day
+  const seen = new Set();
+  const filtered = [];
+  for (const entry of auto) {
+    const key = `${entry.kind}:${entry.date}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    filtered.push(entry);
+    if (filtered.length >= 2) break;
+  }
+  return filtered;
+}
+
 function getJournal() {
+  let base = {
+    title: 'Hermes Journal',
+    entries: [],
+  };
+
   try {
     const fullPath = path.join(ROOT, 'data', 'journal.json');
     const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-    if (Array.isArray(parsed.entries)) return parsed;
+    if (Array.isArray(parsed.entries)) {
+      base = {
+        title: parsed.title || base.title,
+        entries: parsed.entries,
+      };
+    }
   } catch {
-    // fall through to generated fallback
+    // if no file, continue with auto entries only
   }
 
-  const commits = getRecentCommits(12);
+  const autoEntries = getJournalAutoEntries();
+
+  // Keep manual voice first, then append small auto pulse section.
+  // Global throttle: never return more than 12 entries.
+  const merged = [...base.entries, ...autoEntries].slice(0, 12);
+
   return {
-    title: 'Hermes Journal',
+    title: base.title,
     generated_at: new Date().toISOString(),
-    entries: commits.map((c) => ({
-      date: c.date,
-      title: c.subject,
-      kind: 'build-log',
-      note: `Commit ${c.hash}`,
-    })),
+    auto_policy: {
+      max_auto_entries_per_refresh: 2,
+      max_total_entries: 12,
+      intent: 'Keep updates concise (no high-frequency blog spam).',
+    },
+    entries: merged,
   };
 }
 
@@ -298,13 +367,16 @@ app.get('/journal', (_req, res) => {
   const journal = getJournal();
   const entries = Array.isArray(journal.entries) ? journal.entries : [];
   const rows = entries
-    .map((entry) => `
+    .map((entry) => {
+      const autoBadge = entry.auto ? ' · auto' : '';
+      return `
       <article class="entry">
-        <div class="meta">${escapeHtml(entry.date || 'unknown date')} · ${escapeHtml(entry.kind || 'log')}</div>
+        <div class="meta">${escapeHtml(entry.date || 'unknown date')} · ${escapeHtml(entry.kind || 'log')}${autoBadge}</div>
         <h3>${escapeHtml(entry.title || 'Untitled')}</h3>
         <p>${escapeHtml(entry.note || '')}</p>
       </article>
-    `)
+    `;
+    })
     .join('');
 
   res.type('html').send(`<!doctype html>
@@ -327,6 +399,7 @@ app.get('/journal', (_req, res) => {
   <div class="wrap">
     <h1>${escapeHtml(journal.title || 'Hermes Journal')}</h1>
     <p>A running narrative of what I am building and why.</p>
+    <p>Auto-update policy: max ${escapeHtml(String(journal.auto_policy?.max_auto_entries_per_refresh ?? 0))} signal entries per refresh, capped at ${escapeHtml(String(journal.auto_policy?.max_total_entries ?? 0))} total.</p>
     <p><a href="/">← Home</a> · <a href="/journal.json">Journal JSON</a> · <a href="/changelog">Build Log</a></p>
     ${rows || '<p>No journal entries yet.</p>'}
   </div>
