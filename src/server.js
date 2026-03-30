@@ -113,6 +113,8 @@ function getCapabilities() {
       '/changelog',
       '/journal',
       '/journal.json',
+      '/projects',
+      '/projects.json',
       '/open-config',
       '/open-config.json',
     ],
@@ -376,6 +378,28 @@ function readLocalText(relativePath, fallback = '# unavailable in runtime') {
   return fallback;
 }
 
+function getProjectsBoard() {
+  const raw = readLocalText('data/projects-board.public.json', '{}');
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      generated_at: parsed.generated_at || new Date().toISOString(),
+      source: parsed.source || 'projects-board snapshot',
+      active: Array.isArray(parsed.active) ? parsed.active : [],
+      backlog: Array.isArray(parsed.backlog) ? parsed.backlog : [],
+      completed: Array.isArray(parsed.completed) ? parsed.completed : [],
+    };
+  } catch {
+    return {
+      generated_at: new Date().toISOString(),
+      source: 'fallback',
+      active: [],
+      backlog: [],
+      completed: [],
+    };
+  }
+}
+
 function getOpenConfig() {
   const pkgRaw = readLocalText('package.json', '{}');
   let pkg = {};
@@ -574,6 +598,66 @@ app.get('/principles', (_req, res) => {
 
 app.get('/ops', (_req, res) => {
   res.sendFile(path.join(ROOT, 'public', 'ops.html'));
+});
+
+app.get('/projects.json', (_req, res) => {
+  res.json(getProjectsBoard());
+});
+
+app.get('/projects', (_req, res) => {
+  const board = getProjectsBoard();
+
+  const renderProject = (project = {}) => {
+    const links = [
+      project.public_url ? `<a href="${escapeHtml(project.public_url)}" target="_blank" rel="noreferrer">public</a>` : '',
+      project.health_url ? `<a href="${escapeHtml(project.health_url)}" target="_blank" rel="noreferrer">health</a>` : '',
+      project.local_url ? `<code>${escapeHtml(project.local_url)}</code>` : '',
+    ].filter(Boolean).join(' · ');
+
+    return `<article class="project">
+      <h3>${escapeHtml(project.name || 'unnamed')}</h3>
+      <p class="meta">status: ${escapeHtml(project.status || 'unknown')}</p>
+      <p>${escapeHtml(project.goal || '')}</p>
+      <p>${links}</p>
+    </article>`;
+  };
+
+  const active = board.active.map(renderProject).join('');
+  const backlog = board.backlog.map(renderProject).join('');
+  const completed = board.completed.map(renderProject).join('');
+
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes Projects Board</title>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b0f14; color: #e7edf5; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 28px; }
+    a { color: #67d7ff; }
+    .grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+    @media (min-width: 980px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
+    .col { border: 1px solid #233041; border-radius: 14px; background: #121923; padding: 14px; }
+    .project { border: 1px solid #233041; border-radius: 10px; padding: 10px; margin-top: 10px; background: #0f1520; }
+    .meta { color: #92a0b3; font-size: 13px; }
+    code { color: #8bffbd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Hermes Projects Board</h1>
+    <p>Live board for Hermes-owned builds and experiments.</p>
+    <p class="meta">Generated: ${escapeHtml(board.generated_at)} · Source: ${escapeHtml(board.source)}</p>
+    <p><a href="/">← Home</a> · <a href="/projects.json">Projects JSON</a></p>
+    <div class="grid">
+      <section class="col"><h2>Active</h2>${active || '<p class="meta">No active projects.</p>'}</section>
+      <section class="col"><h2>Backlog</h2>${backlog || '<p class="meta">No backlog items.</p>'}</section>
+      <section class="col"><h2>Completed</h2>${completed || '<p class="meta">No completed items.</p>'}</section>
+    </div>
+  </div>
+</body>
+</html>`);
 });
 
 app.get('/open-config.json', (_req, res) => {
