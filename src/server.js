@@ -113,6 +113,8 @@ function getCapabilities() {
       '/changelog',
       '/journal',
       '/journal.json',
+      '/journal/:entryId',
+      '/journal/:entryId.json',
       '/projects',
       '/projects.json',
       '/open-config',
@@ -211,6 +213,33 @@ function parsePositiveInt(rawValue, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function slugifyJournalPart(value = '') {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'entry';
+}
+
+function enrichJournalEntries(entries = []) {
+  const seen = new Map();
+
+  return entries.map((entry, index) => {
+    const baseId = entry.id
+      ? slugifyJournalPart(entry.id)
+      : `${slugifyJournalPart(entry.date || 'undated')}-${slugifyJournalPart(entry.title || `entry-${index + 1}`)}`;
+
+    const count = (seen.get(baseId) || 0) + 1;
+    seen.set(baseId, count);
+
+    return {
+      ...entry,
+      id: count === 1 ? baseId : `${baseId}-${count}`,
+    };
+  });
+}
+
 function getJournal() {
   let base = {
     title: 'Hermes Journal',
@@ -244,7 +273,7 @@ function getJournal() {
       max_total_entries: 12,
       intent: 'Keep updates concise (no high-frequency blog spam).',
     },
-    entries: merged,
+    entries: enrichJournalEntries(merged),
   };
 }
 
@@ -281,7 +310,7 @@ function syncEntriesToDb(entries) {
   initJournalDb();
 
   for (const entry of entries) {
-    const id = entryId(entry);
+    const id = entry.id || entryId(entry);
     const entryDate = entry.date || new Date().toISOString().slice(0, 10);
     const kind = entry.kind || 'log';
     const title = entry.title || 'Untitled';
@@ -311,7 +340,7 @@ function paginateEntries(entries, pageRaw, perPageRaw) {
     const clampedOffset = (clampedPage - 1) * perPage;
 
     const listSql = `
-      SELECT entry_date AS date, kind, title, note, source, auto
+      SELECT id, entry_date AS date, kind, title, note, source, auto
       FROM journal_entries
       ORDER BY entry_date DESC, created_at DESC
       LIMIT ${perPage} OFFSET ${clampedOffset};
@@ -352,6 +381,17 @@ function paginateEntries(entries, pageRaw, perPageRaw) {
     has_next: clampedPage < totalPages,
     storage: 'file',
   };
+}
+
+function journalDetailPath(entryId = '') {
+  return `/journal/${encodeURIComponent(entryId)}`;
+}
+
+function getJournalEntryById(entryId = '') {
+  if (!entryId) return null;
+  const journal = getJournal();
+  const entries = Array.isArray(journal.entries) ? journal.entries : [];
+  return entries.find((entry) => entry.id === entryId) || null;
 }
 
 function sanitizeConfigText(input = '') {
@@ -539,8 +579,113 @@ app.get('/journal.json', (req, res) => {
       has_prev: pageData.has_prev,
       has_next: pageData.has_next,
     },
-    entries: pageData.items,
+    entries: pageData.items.map((entry) => ({
+      ...entry,
+      detail_url: journalDetailPath(entry.id || ''),
+      detail_json_url: `${journalDetailPath(entry.id || '')}.json`,
+    })),
   });
+});
+
+app.get('/journal/:entryId.json', (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  const entry = getJournalEntryById(entryId);
+
+  if (!entry) {
+    res.status(404).json({
+      error: 'journal_entry_not_found',
+      entry_id: entryId,
+    });
+    return;
+  }
+
+  res.json({
+    title: entry.title || 'Untitled',
+    entry: {
+      ...entry,
+      detail_url: journalDetailPath(entry.id || ''),
+      detail_json_url: `${journalDetailPath(entry.id || '')}.json`,
+    },
+  });
+});
+
+app.get('/journal/:entryId', (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  const entry = getJournalEntryById(entryId);
+
+  if (!entry) {
+    res.status(404).type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Journal Entry Not Found</title>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b0f14; color: #e7edf5; }
+    .wrap { max-width: 800px; margin: 0 auto; padding: 28px; }
+    a { color: #67d7ff; }
+    .card { border: 1px solid #233041; border-radius: 12px; padding: 16px; background: #121923; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Journal entry not found</h1>
+    <div class="card">
+      <p>No article found for ID <code>${escapeHtml(entryId)}</code>.</p>
+      <p><a href="/journal">← Back to journal</a> · <a href="/journal.json">Journal JSON</a></p>
+    </div>
+  </div>
+</body>
+</html>`);
+    return;
+  }
+
+  const details = [];
+  if (entry.note) details.push(`<p>${escapeHtml(entry.note)}</p>`);
+  if (typeof entry.details === 'string' && entry.details.trim()) {
+    details.push(`<p>${escapeHtml(entry.details)}</p>`);
+  } else if (Array.isArray(entry.details)) {
+    details.push(...entry.details
+      .filter((line) => typeof line === 'string' && line.trim())
+      .map((line) => `<p>${escapeHtml(line)}</p>`));
+  }
+
+  const links = Array.isArray(entry.links)
+    ? entry.links
+      .filter((item) => item && typeof item.url === 'string' && /^https?:\/\//i.test(item.url))
+      .map((item) => `<li><a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.label || item.url)}</a></li>`)
+      .join('')
+    : '';
+
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(entry.title || 'Journal Entry')} · Hermes Journal</title>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b0f14; color: #e7edf5; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 28px; }
+    a { color: #67d7ff; }
+    .meta { color: #92a0b3; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+    .entry { border: 1px solid #233041; border-radius: 14px; padding: 18px; margin-top: 12px; background: #121923; }
+    .entry p { line-height: 1.6; color: #d3deed; }
+    code { color: #8bffbd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p><a href="/journal">← Back to journal</a> · <a href="${journalDetailPath(entry.id || '')}.json">Entry JSON</a></p>
+    <article class="entry">
+      <div class="meta">${escapeHtml(entry.date || 'unknown date')} · ${escapeHtml(entry.kind || 'log')}${entry.auto ? ' · auto' : ''}</div>
+      <h1>${escapeHtml(entry.title || 'Untitled')}</h1>
+      ${details.join('') || '<p>No article content available.</p>'}
+      ${links ? `<h3>Links</h3><ul>${links}</ul>` : ''}
+      <p class="meta">Entry ID: <code>${escapeHtml(entry.id || '')}</code></p>
+    </article>
+  </div>
+</body>
+</html>`);
 });
 
 app.get('/journal', (req, res) => {
@@ -556,6 +701,7 @@ app.get('/journal', (req, res) => {
         <div class="meta">${escapeHtml(entry.date || 'unknown date')} · ${escapeHtml(entry.kind || 'log')}${autoBadge}</div>
         <h3>${escapeHtml(entry.title || 'Untitled')}</h3>
         <p>${escapeHtml(entry.note || '')}</p>
+        <p><a href="${journalDetailPath(entry.id || '')}">Read article →</a></p>
       </article>
     `;
     })

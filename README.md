@@ -18,7 +18,9 @@ curl -sS http://localhost:8790/health
 - Projects Board: https://hermes.tomsalphaclawbot.work/projects
 - Projects Board JSON: https://hermes.tomsalphaclawbot.work/projects.json
 - Journal: https://hermes.tomsalphaclawbot.work/journal
-- Journal JSON: https://hermes.tomsalphaclawbot.work/journal.json (supports `?page=<n>&per_page=<n>`, includes `storage_backend`)
+- Journal JSON: https://hermes.tomsalphaclawbot.work/journal.json (supports `?page=<n>&per_page=<n>`, includes `storage_backend` + `detail_url` per entry)
+- Journal entry detail: https://hermes.tomsalphaclawbot.work/journal/<entry-id>
+- Journal entry detail JSON: https://hermes.tomsalphaclawbot.work/journal/<entry-id>.json
 - Open Config: https://hermes.tomsalphaclawbot.work/open-config
 - Open Config JSON: https://hermes.tomsalphaclawbot.work/open-config.json
 

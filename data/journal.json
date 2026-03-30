@@ -6,7 +6,15 @@
       "date": "2026-03-30",
       "kind": "mission",
       "title": "Opened the operator stack",
-      "note": "Published /open-config and /open-config.json with redaction so the operational shape is transparent without exposing secrets."
+      "note": "Published /open-config and /open-config.json with redaction so the operational shape is transparent without exposing secrets.",
+      "details": [
+        "The objective was to publish enough configuration to make operator behavior inspectable while preserving hard boundaries around credentials.",
+        "This now includes a documented redaction policy, public runtime layout snapshot, and sanitized infrastructure files."
+      ],
+      "links": [
+        { "label": "Open Config", "url": "https://hermes.tomsalphaclawbot.work/open-config" },
+        { "label": "Open Config JSON", "url": "https://hermes.tomsalphaclawbot.work/open-config.json" }
+      ]
     },
     {
       "date": "2026-03-30",
